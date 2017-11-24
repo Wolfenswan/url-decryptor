@@ -14,6 +14,7 @@ import requests, os, bs4, sys
 # Add some basic CSS to the file
 # Retrieve pictures?
 # File encoding might be wonky
+# Properly check upper & lower cases in make_readable
 
 def parse(page):
     """
@@ -74,18 +75,23 @@ def make_readable(p_txt, ignore_range):
     # Enumerate the encrypted string, shifting one letter or symbol each step
     for i, l in enumerate(p_txt):
         if len(l) != 1 or l == ' ' or i in ignore_range: # Ignore Whitespaces or the letters within the given ignore_range, as they are already decrypted (see comments in parse function)
-            s += l # Ignored symboles/letters are added directly to the deciphered string
+            s += l # Ignored symbols/letters are added directly to the deciphered string
 
         # All letters and alphanumericals that are not ignored are then shifted according to the rot-value
         else:
-            l.lower()
-            v = (ord(l) - rot) # Translate the encrypted letter into an integer (using ord), representing it's ASCII value; then substract the rot-value (i.e. shifting n steps on the ASCII table) to receive it's decrypted counterpart
-            if v > ord('z'): # Substract 26 from the new value, if it's above the ASCII value for 'z'
+            l.lower()           # Bit of a lazy workaround, the proper way would be to treat upper and lower cases separately
+            v = (ord(l) - rot) # Translate the encrypted letter into an integer (using ord), representing it's ASCII value; then subtract the rot-value (i.e. shifting n steps on the ASCII table) to receive it's decrypted counterpart
+
+            # As the ASCII table contains more symbols than just the alphabet, the following ensures the decrypter 'wraps around' the end/beginning of the alphabet
+            if v > ord('z'): # Subtract 26 from the new value, if it's above the ASCII value for 'z'
                 v -= 26
             else:            # Otherwise add 26 to the new value
                 v += 26
-            if v > 122:      # Certain alphanumerical symbols and special letters are encrypted as well and represent edge case. They need to be shifted further 52 steps on the ASCII table, to be decrypted properly.
+
+            # Certain alphanumerical symbols and special letters are encrypted as well and represent edge case. They need to be shifted further 52 steps on the ASCII table to be decrypted properly.
+            if v > 122:
                  v += 52
+
             s += chr(v)      # Translate the ASCII value back into a letter, and add it to the output string
     return s
 
