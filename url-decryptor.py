@@ -58,6 +58,7 @@ def parse(page):
 
 def make_readable(p_txt, ignore_range):
     """
+    This function takes a rot-25 obfuscated string, shifts it accordingly and returns the deciphered string.
 
     :param p_txt: rot-25 obfuscated text
     :type p_txt: string
@@ -67,23 +68,25 @@ def make_readable(p_txt, ignore_range):
     :rtype: string
     """
 
-    rot = 27 # Why do I need to use 27 instead of 25, if it's a rot-25 cypher???
-    s = ''
-    for i, l in enumerate(p_txt):
-        if len(l) != 1 or l == ' ' or i in ignore_range:
-            s += l
+    rot = 27 # Why do I need to use 27 instead of 25, if it's a rot-25 cypher?
+    s = '' # The deciphered string
 
-        # All letters and alphanumericals are shifted according to the rot-value
+    # Enumerate the encrypted string, shifting one letter or symbol each step
+    for i, l in enumerate(p_txt):
+        if len(l) != 1 or l == ' ' or i in ignore_range: # Ignore Whitespaces or the letters within the given ignore_range, as they are already decrypted (see comments in parse function)
+            s += l # Ignored symboles/letters are added directly to the deciphered string
+
+        # All letters and alphanumericals that are not ignored are then shifted according to the rot-value
         else:
             l.lower()
-            v = (ord(l) - rot)
-            if v > ord('z'):
+            v = (ord(l) - rot) # Translate the encrypted letter into an integer (using ord), representing it's ASCII value; then substract the rot-value (i.e. shifting n steps on the ASCII table) to receive it's decrypted counterpart
+            if v > ord('z'): # Substract 26 from the new value, if it's above the ASCII value for 'z'
                 v -= 26
-            else:
+            else:            # Otherwise add 26 to the new value
                 v += 26
-            if v > 122:
+            if v > 122:      # Certain alphanumerical symbols and special letters are encrypted as well and represent edge case. They need to be shifted further 52 steps on the ASCII table, to be decrypted properly.
                  v += 52
-            s += chr(v)
+            s += chr(v)      # Translate the ASCII value back into a letter, and add it to the output string
     return s
 
 def make_readable_alt(p_txt):
@@ -111,7 +114,7 @@ def write_file(output):
     """
     file_name = (output[0] + '.html')
     working_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
-    file = open(os.path.join(working_dir, file_name), 'w')
+    file = open(os.path.join(working_dir+'\output', file_name), 'w')
     file.write('<html><body>')
     for line in output:
         file.write('<p>' + line + '</p>')
