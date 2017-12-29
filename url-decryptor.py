@@ -2,12 +2,11 @@
 '''
 DESCRIPTION:
 This script will take a URL of a specific online-magazine's paywall-ed content, decrypt it and write the site's content to a local HTML file.
-
 DISCLAIMER:
 This is a theoretical exercise only and must not be used to access paid-only content.
 '''
 
-import requests, os, bs4, sys
+import requests, os, bs4, sys, argparse
 
 # TODO
 # implement a basic GUI
@@ -16,27 +15,24 @@ import requests, os, bs4, sys
 # File encoding might be wonky
 # Properly check upper & lower cases in make_readable
 
-def parse(page):
-    """
+def parse_header(page):
+    classes = ['span.headline-intro','span.headline','p.article-intro']
+    for c in classes:
+        yield page.select(c)[0].get_text()
 
-    :param page: URL with rot-25 obfuscated content
-    :type page: bs4-object
-    :return: page with decrypted content
-    :rtype: list of strings
-    """
-    output = []
-    output.append(page.select('span.headline-intro')[0].get_text())
-    output.append(page.select('span.headline')[0].get_text())
-    output.append(page.select('p.article-intro')[0].get_text())
-    p_all = page.select(".column-both-center p") # As there's no straightforward way to separate readable content from the obfuscated one, gather all <p> first
+def parse_body(page):
+    p_all = page.select(".column-both-center p")  # As there's no straightforward way to separate readable content from the obfuscated one, gather all <p> first
     for p in p_all: # Now loop through them, but stop once we hit the obfuscated content, thus only readable <p> are added to the content list
         text = p.get_text()
         if p.get('class') is None and text is not None:
             if (p.parent in page.select('noscript')): # The noscript parent indicates the beginning of the obfuscated content, thus we can stop the loop here
                 break
             else:
-                output.append(text)
-    p_obfuscated = page.select('p.obfuscated') # To make things easier, a new list containing only the obfuscated <p> is created
+                yield text
+
+def parse_encrypted(page):
+    # To make things easier, a new list containing only the obfuscated <p> is created
+    p_obfuscated = page.select('p.obfuscated')
 
     for p in p_obfuscated:
         p_txt = p.get_text()
@@ -54,13 +50,25 @@ def parse(page):
                 ignore_range = range(index,(index+len(link_text)))
 
         p_readable = make_readable(p_txt, ignore_range)
-        output.append(p_readable)
+
+        yield p_readable
+
+def parse_page(page):
+    output = []
+    generators = [parse_header(page), parse_body(page), parse_encrypted(page)]
+
+    for gen in generators:
+        try:
+            while True:
+                output.append(next(gen))
+        except StopIteration:
+            pass
+
     return output
 
 def make_readable(p_txt, ignore_range):
     """
     This function takes a rot-25 obfuscated string, shifts it accordingly and returns the deciphered string.
-
     :param p_txt: rot-25 obfuscated text
     :type p_txt: string
     :param ignore_range: range of letters within p_txt to ignore
@@ -79,13 +87,12 @@ def make_readable(p_txt, ignore_range):
 
         # All letters and alphanumericals that are not ignored are then shifted according to the rot-value
         else:
-            l.lower()           # Bit of a lazy workaround, the proper way would be to treat upper and lower cases separately
             v = (ord(l) - rot) # Translate the encrypted letter into an integer (using ord), representing it's ASCII value; then subtract the rot-value (i.e. shifting n steps on the ASCII table) to receive it's decrypted counterpart
 
             # As the ASCII table contains more symbols than just the alphabet, the following ensures the decrypter 'wraps around' the end/beginning of the alphabet
-            if v > ord('z'): # Subtract 26 from the new value, if it's above the ASCII value for 'z'
+            if v > ord('z'):
                 v -= 26
-            else:            # Otherwise add 26 to the new value
+            else:
                 v += 26
 
             # Certain alphanumerical symbols and special letters are encrypted as well and represent edge case. They need to be shifted further 52 steps on the ASCII table to be decrypted properly.
@@ -97,7 +104,7 @@ def make_readable(p_txt, ignore_range):
 
 def make_readable_alt(p_txt):
     '''
-    Makes a rot-25 obfuscated string readable again (alternative version)
+    Makes a rot-25 obfuscated string readable (alternative version)
     source: https://gist.github.com/inaz2/9a1abd63abbf1807058b
     '''
 
@@ -114,27 +121,39 @@ def make_readable_alt(p_txt):
 
 def write_file(output):
     """
-
     :param output: text to write to file
     :type output: list of strings/<p>aragraphs
     """
     file_name = (output[0] + '.html')
-    working_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
-    with open(os.path.join(working_dir+'\output', file_name), 'w') as file:
+    working_dir = os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'output')
+    try:
+        file = open(os.path.join(working_dir, file_name), 'w')
         file.write('<html><body>')
         for line in output:
             file.write('<p>' + line + '</p>')
         file.write('</body></html>')
+        file.close()
+    except Exception as exc:
+        print('Failed writing file with error: %s' % (exc))
+    else:
+        print('Successully wrote page to %s' % (file_name))
+
+def parse_argv():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('url')
+    args = parser.parse_args()
+    return (args.url)
 
 def main():
-    url = input('Enter the URL:\n')
+    url = parse_argv() if len(sys.argv) > 1 else input('Enter the URL:\n')
     r = requests.get(url)
     try:
         r.raise_for_status()
     except Exception as exc:
         print('URL could not be retrieved with error: %s' % (exc))
-    page = bs4.BeautifulSoup(r.text, "html.parser")
-    output = parse(page)
-    write_file(output)
+    else:
+        page = bs4.BeautifulSoup(r.text, "html.parser")
+        output = parse_page(page)
+        write_file(output)
 
 main()
